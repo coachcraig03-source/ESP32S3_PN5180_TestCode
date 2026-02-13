@@ -1,115 +1,95 @@
 #include <Arduino.h>
-#include <SPI.h>
+#define LGFX_USE_V1
+#include <LovyanGFX.hpp>
 #include "pins.h"
-#include "utils/NFC_Module.h"
-#include "utils/VS1053_Module.h"
 
-// Create NFC module
-NFC_Module nfcModule(NFC_CS, NFC_BUSY, NFC_RST);
+class LGFX : public lgfx::LGFX_Device {
+  lgfx::Panel_ST7796 _panel_instance;
+  lgfx::Bus_SPI _bus_instance;
 
-// Create VS1053 module
-VS1053_Module audioModule(VS1053_CS, VS1053_DCS, VS1053_DREQ, VS1053_RST);
+public:
+  LGFX(void) {
+    {
+      auto cfg = _bus_instance.config();
+      cfg.spi_host = SPI3_HOST;  // HSPI on ESP32-S3
+      cfg.spi_mode = 0;
+      cfg.freq_write = 40000000;  // 40MHz
+      cfg.freq_read = 16000000;
+      cfg.spi_3wire = false;
+      cfg.use_lock = true;
+      cfg.dma_channel = SPI_DMA_CH_AUTO;
+      cfg.pin_sclk = SPI2_SCK;   // GPIO 36
+      cfg.pin_mosi = SPI2_MOSI;  // GPIO 35
+      cfg.pin_miso = -1;         // NOT CONNECTED
+      cfg.pin_dc = TFT_DC;       // GPIO 40
+      _bus_instance.config(cfg);
+      _panel_instance.setBus(&_bus_instance);
+    }
+    {
+      auto cfg = _panel_instance.config();
+      cfg.pin_cs = TFT_CS;       // GPIO 38
+      cfg.pin_rst = TFT_RST;     // GPIO 39
+      cfg.pin_busy = -1;
+      cfg.panel_width = 320;
+      cfg.panel_height = 480;
+      cfg.offset_x = 0;
+      cfg.offset_y = 0;
+      _panel_instance.config(cfg);
+    }
+    setPanel(&_panel_instance);
+  }
+};
 
-void printMenu() {
-  Serial.println();
-  Serial.println("========================================");
-  Serial.println("ESP32-S3 Hardware Test Menu");
-  Serial.println("========================================");
-  Serial.println("1: PN5180 NFC test (20 reads)");
-  Serial.println("2: TFT display test (not implemented)");
-  Serial.println("3: VS1053 audio test");
-  Serial.println("4: SD card test (not implemented)");
-  Serial.println("5: Touch test (not implemented)");
-  Serial.println("========================================");
-  Serial.println();
-}
+LGFX tft;
 
 void setup() {
   Serial.begin(115200);
-  delay(2000);
+  delay(1000);
   
-  Serial.println("\n=== ESP32-S3 MP3 Player Hardware Init ===\n");
+  Serial.println("\n=== ST7796S with LovyanGFX ===");
   
-  // Initialize SPI1 bus (PN5180 + VS1053)
-  Serial.println("Initializing SPI1 bus...");
-  SPI.begin(SPI1_SCK, SPI1_MISO, SPI1_MOSI);
-  delay(100);
+  // CRITICAL: Reset TFT immediately to clear boot state
+  pinMode(TFT_RST, OUTPUT);
+  digitalWrite(TFT_RST, LOW);
+  delay(50);
+  digitalWrite(TFT_RST, HIGH);
+  delay(150);
   
-  // Hold VS1053 in reset during PN5180 init
-  pinMode(VS1053_RST, OUTPUT);
-  digitalWrite(VS1053_RST, LOW);  // Keep VS1053 off
-  delay(100);
-
-  // Initialize NFC module
-  Serial.println("\nInitializing PN5180 NFC...");
-  nfcModule.begin();
-  delay(100);
-
-  // Now release VS1053 and initialize it
-  digitalWrite(VS1053_RST, HIGH);
-  delay(100);
-  // Initialize VS1053 module
-  Serial.println("\nInitializing VS1053 Audio...");
-  audioModule.begin();
-
-// Manual CS test
-Serial.println("\nManual CS test - watch GPIO 9:");
-pinMode(9, OUTPUT);
-for (int i = 0; i < 6; i++) {
-  digitalWrite(9, LOW);
-  Serial.println("CS LOW");
-  delay(500);
-  digitalWrite(9, HIGH);
-  Serial.println("CS HIGH");
-  delay(500);
-}
+  Serial.println("TFT reset complete");
   
-  Serial.println("\n=== Hardware Initialization Complete ===");
+  // Backlight
+  pinMode(TFT_BL, OUTPUT);
+  digitalWrite(TFT_BL, HIGH);
+  Serial.println("Backlight ON");
   
-  printMenu();
+  // Initialize display
+  Serial.println("Initializing display...");
+  tft.init();
+  tft.setRotation(1);  // Landscape
+  
+  Serial.printf("Display size: %d x %d\n", tft.width(), tft.height());
+  
+  // Test pattern
+  Serial.println("Drawing test pattern...");
+  
+  tft.fillScreen(TFT_RED);
+  delay(1000);
+  
+  tft.fillScreen(TFT_GREEN);
+  delay(1000);
+  
+  tft.fillScreen(TFT_BLUE);
+  delay(1000);
+  
+  tft.fillScreen(TFT_BLACK);
+  tft.setTextColor(TFT_WHITE);
+  tft.setTextSize(3);
+  tft.drawString("ST7796S Works!", 50, 100);
+  tft.drawString("480 x 320", 100, 150);
+  
+  Serial.println("Test complete!");
 }
 
 void loop() {
-  if (!Serial.available())
-    return;
-  
-  char c = Serial.read();
-  
-  switch (c) {
-    case '1':
-      Serial.println("\n>>> Running PN5180 test (20 reads)...");
-      nfcModule.runPNTest(20);
-      printMenu();
-      break;
-    
-    case '2':
-      Serial.println("\n>>> TFT test not implemented yet");
-      printMenu();
-      break;
-    
-    case '3':
-      Serial.println("\n>>> Running VS1053 test...");
-      Serial.println("Checking if VS1053 is alive...");
-      if (audioModule.isAlive()) {
-        Serial.println("✓ VS1053 is responding!");
-        audioModule.getChipInfo();
-      } else {
-        Serial.println("✗ VS1053 not responding - check wiring");
-      }
-      printMenu();
-      break;
-    
-    case '4':
-      Serial.println("\n>>> SD card test not implemented yet");
-      printMenu();
-      break;
-    
-    case '5':
-      Serial.println("\n>>> Touch test not implemented yet");
-      printMenu();
-      break;
-    
-    default:
-      break;
-  }
+  delay(1000);
 }

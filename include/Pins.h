@@ -37,38 +37,38 @@
 //   SPI BUS 2 (HSPI) - Display & SD Card
 //   4.0" ST7796S TFT with SD card
 // =========================
-#define SPI2_SCK        36      // HSPI Clock
-#define SPI2_MOSI       35      // HSPI MOSI
-#define SPI2_MISO       37      // HSPI MISO
+#define SPI2_SCK        36      // HSPI Clock (pin 7)
+#define SPI2_MOSI       35      // HSPI MOSI (pin 6 - SDI)
+#define SPI2_MISO       47//37      // HSPI MISO (pin 9 - SDO)
 
 // =========================
 //   TFT DISPLAY (ST7796S 4.0")
 //   320x480 resolution
 // =========================
-#define TFT_CS          33      // LCD Chip Select (LCD_CS)
-#define TFT_RST         34      // LCD Reset (LCD_RST) - may not be exposed, use -1 if not available
-#define TFT_DC          38      // LCD Data/Command (LCD_RS)
-#define TFT_BL          39      // LCD Backlight (optional)
+#define TFT_CS          38      // LCD Chip Select (pin 3) - GPIO 33 not exposed
+#define TFT_RST         39      // LCD Reset (pin 4) - GPIO 34 not exposed
+#define TFT_DC          40      // LCD Data/Command (pin 5 - LCD_RS)
+#define TFT_BL          41      // LCD Backlight (pin 8 - LED)
 
 // =========================
 //   SD CARD (on TFT module)
 //   Shares SPI2 bus with TFT
 // =========================
-#define SD_CS           40      // SD Card Chip Select
+#define SD_CS           42      // SD Card Chip Select (pin 14)
 
 // =========================
 //   CAPACITIVE TOUCH (I2C)
 //   Separate I2C bus - no conflicts
 // =========================
-#define I2C_SDA         41      // Touch IIC Data (CTP_SDA)
-#define I2C_SCL         42      // Touch IIC Clock (CTP_SCL)
-#define TOUCH_RST       45      // Touch Reset (CTP_RST)
-#define TOUCH_INT       46      // Touch Interrupt (CTP_INT)
+#define I2C_SDA         45      // Touch IIC Data (pin 12 - CTP_SDA)
+#define I2C_SCL         46      // Touch IIC Clock (pin 10 - CTP_SCL)
+#define TOUCH_RST       37//47      // Touch Reset (pin 11 - CTP_RST)
+#define TOUCH_INT       48      // Touch Interrupt (pin 13 - CTP_INT)
 
 // =========================
 //   USER INTERFACE
 // =========================
-#define LED_STATUS      48      // Built-in RGB LED
+#define LED_STATUS      21      // Built-in RGB LED (GPIO 48 used for touch)
 #define BUTTON_MODE     0       // Boot button (built-in)
 
 // =========================
@@ -76,9 +76,9 @@
 // =========================
 // SPI1 (11,12,13): PN5180 NFC + VS1053B Audio
 // SPI2 (35,36,37): ST7796S TFT + SD Card
-// I2C  (41,42):    Capacitive Touch
+// I2C  (45,46):    Capacitive Touch
 //
-// GPIO 34 may not be exposed on ESP32-S3-DevKitC-1
-// If TFT_RST not available, use -1 and tie RST high on display
+// GPIO 33 & 34 are NOT exposed on ESP32-S3-DevKitC-1
+// Adjusted all pins to available GPIOs (38-42, 45-48)
 
 #endif // PINS_H
