@@ -6,11 +6,23 @@ NFC_Module::NFC_Module(uint8_t cs, uint8_t busy, uint8_t rst)
 }
 
 void NFC_Module::begin() {
+  //nfc = new PN5180ISO14443(_cs, _busy, _rst);
+
+  //Serial.println("PN5180 begin()...");
+  //nfc->begin();
   nfc = new PN5180ISO14443(_cs, _busy, _rst);
 
-  Serial.println("PN5180 begin()...");
-  nfc->begin();
-
+  // DON'T call nfc->begin() - it corrupts SPI
+  // Serial.println("PN5180 begin()...");
+  // nfc->begin();
+  
+  // Instead, manually setup pins
+  pinMode(_cs, OUTPUT);
+  digitalWrite(_cs, HIGH);
+  pinMode(_rst, OUTPUT);
+  pinMode(_busy, INPUT);
+  
+  // SPI already initialized in main - don't touch it
   Serial.println("PN5180 Hard-Reset...");
   nfc->reset();
 

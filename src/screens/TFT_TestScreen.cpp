@@ -7,52 +7,45 @@
 TFT_TestScreen::TFT_TestScreen(TFT_Module* module)
   : _tftModule(module), tft(nullptr)
 {
-  // Don't get tft pointer here - it's not created yet!
 }
 
 void TFT_TestScreen::runTest() {
   Serial.println("\n=== Running Full TFT Test Suite ===");
   
-  // Get tft pointer NOW (after begin() has been called)
+  // Get tft pointer (after begin() has been called)
   tft = _tftModule->getTFT();
-
-    Serial.printf("TFT pointer: %p\n", tft);  // ADD THIS
   
   if (!tft) {
     Serial.println("ERROR: TFT not initialized!");
     return;
   }
-
-    Serial.println("About to call testColorFills...");  // ADD THIS
   
   testColorFills();
-  delay(5000);
+  delay(1000);
   
   testColorBars();
-  delay(5000);
+  delay(1000);
   
   testText();
-  delay(5000);
+  delay(1000);
   
   testGraphics();
-  delay(5000);
+  delay(1000);
   
   Serial.println("=== TFT Test Complete ===\n");
 }
 
 void TFT_TestScreen::testColorFills() {
   Serial.println("Test: Color fills...");
-    Serial.println("Calling fillScreen(RED)...");  // ADD THIS
   
   tft->fillScreen(TFT_RED);
-    Serial.println("Red done");  // ADD THIS
-  delay(1000);
+  delay(800);
   
   tft->fillScreen(TFT_GREEN);
-  delay(1000);
+  delay(800);
   
   tft->fillScreen(TFT_BLUE);
-  delay(500);
+  delay(800);
   
   tft->fillScreen(TFT_BLACK);
   
@@ -64,9 +57,9 @@ void TFT_TestScreen::testColorBars() {
   
   tft->fillScreen(TFT_BLACK);
   
-  // Draw horizontal color bars (adjusted for 480x320)
-  int barHeight = 40;
-  int y = 20;
+  // Draw horizontal color bars (480x320 landscape)
+  int barHeight = 45;
+  int y = 10;
   
   tft->fillRect(0, y, 480, barHeight, TFT_RED);
   y += barHeight;
@@ -95,24 +88,25 @@ void TFT_TestScreen::testText() {
   tft->setTextColor(TFT_WHITE, TFT_BLACK);
   
   // Title
-  tft->setTextSize(3);
-  tft->drawString("ILI9488 Display", 120, 20);
+  tft->setTextSize(4);
+  tft->drawString("ST7796S Display", 80, 20);
   
   // Info
-  tft->setTextSize(2);
-  tft->drawString("ESP32-S3", 180, 80);
-  tft->drawString("480 x 320", 180, 110);
-  tft->drawString("LovyanGFX", 180, 140);
+  tft->setTextSize(3);
+  tft->drawString("ESP32-S3", 150, 80);
+  tft->drawString("480 x 320", 150, 120);
+  tft->drawString("LovyanGFX", 140, 160);
   
   // Status
   tft->setTextColor(TFT_GREEN, TFT_BLACK);
-  tft->setTextSize(2);
-  tft->drawString("Status: OK", 160, 220);
+  tft->setTextSize(3);
+  tft->drawString("Status: OK", 130, 220);
   
   // Box
-  tft->drawRect(100, 260, 280, 40, TFT_WHITE);
+  tft->drawRect(50, 270, 380, 40, TFT_WHITE);
   tft->setTextColor(TFT_CYAN, TFT_BLACK);
-  tft->drawString("Text Test Complete", 120, 270);
+  tft->setTextSize(2);
+  tft->drawString("Text Test Complete", 120, 280);
   
   Serial.println("  ✓ Text rendering OK");
 }
@@ -137,16 +131,16 @@ void TFT_TestScreen::testGraphics() {
   
   // Circles
   tft->drawCircle(100, 200, 40, TFT_YELLOW);
-  tft->fillCircle(250, 200, 40, TFT_CYAN);
-  tft->drawCircle(400, 200, 35, TFT_MAGENTA);
+  tft->fillCircle(240, 200, 40, TFT_CYAN);
+  tft->drawCircle(380, 200, 35, TFT_MAGENTA);
   
   delay(1000);
   
   // Final message
   tft->fillScreen(TFT_BLACK);
   tft->setTextColor(TFT_GREEN, TFT_BLACK);
-  tft->setTextSize(3);
-  tft->drawString("All Tests Passed!", 100, 140);
+  tft->setTextSize(4);
+  tft->drawString("All Tests Passed!", 60, 140);
   
   Serial.println("  ✓ Graphics OK");
 }

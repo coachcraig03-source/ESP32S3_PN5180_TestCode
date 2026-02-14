@@ -1,5 +1,5 @@
 // =====================================================================
-//  TFT_TestScreen.h - Test routines for ILI9488 display
+//  TFT_TestScreen.h - Test routines for ST7796S display
 // =====================================================================
 
 #ifndef TFT_TESTSCREEN_H
@@ -24,7 +24,7 @@ public:
   
 private:
   TFT_Module* _tftModule;
-  lgfx::LGFX_Device* tft;  // Use base class type
+  lgfx::LGFX_Device* tft;
 };
 
 #endif // TFT_TESTSCREEN_H

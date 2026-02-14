@@ -1,6 +1,6 @@
 // =====================================================================
-//  TFT_Module.h - ILI9488 Display Module
-//  Encapsulates LovyanGFX setup for ILI9488 480x320 display
+//  TFT_Module.h - ST7796S Display Module
+//  Encapsulates LovyanGFX setup for ST7796S 480x320 display
 // =====================================================================
 
 #ifndef TFT_MODULE_H
@@ -22,7 +22,7 @@ public:
   // Initialize the display
   bool begin();
   
-  // Get access to the underlying display (returns base class type)
+  // Get access to the underlying display
   lgfx::LGFX_Device* getTFT();
   
   // Control backlight
