@@ -9,6 +9,12 @@
 #include "screens/TFT_TestScreen.h"
 #include <Wire.h>
 #include <FT6236.h>  // Changed from FT6X36.h
+#include <WiFi.h>
+#include <time.h>
+
+// WiFi credentials
+const char* WIFI_SSID = "Galactia_Guest";
+const char* WIFI_PASSWORD = "SantaClaus1993";
 
 // Create modules
 RC522_Module nfcModule(NFC_CS, NFC_RST);
@@ -38,6 +44,7 @@ void printMenu() {
   Serial.println("5: Tone test");
   Serial.println("6: SD Card Test");
   Serial.println("7: Read an MP3 file");
+  Serial.println("8: WiFi Connection Test");
   Serial.println("========================================");
   Serial.println();
 }
@@ -47,6 +54,8 @@ void setup() {
   delay(4000);
   
   Serial.println("\n=== ESP32-S3 Hardware Init ===\n");
+  Serial.printf("PSRAM size: %d bytes\n", ESP.getPsramSize());
+Serial.printf("Free PSRAM: %d bytes\n", ESP.getFreePsram());
   
   // Initialize SPI1 bus
   Serial.println("Initializing SPI1 bus...");
@@ -58,6 +67,17 @@ void setup() {
   digitalWrite(VS1053_RST, LOW);
   delay(100);
   
+// Initialize SPI1 explicitly
+Serial.println("Initializing SPI1 bus...");
+SPI.begin(12, 13, 11);  // SCK, MISO, MOSI
+delay(100);
+pinMode(18, OUTPUT);
+digitalWrite(18, LOW);
+delay(100);
+digitalWrite(18, HIGH);
+delay(100);
+
+
   // Initialize RC522
   Serial.println("\nInitializing RC522 NFC...");
   nfcModule.begin();
@@ -286,6 +306,51 @@ case '7':  // Test MP3 file read
   }
          printMenu();
   break;
+  case '8':  // WiFi Test
+{
+  Serial.println("\n=== WiFi Connection Test ===");
+  Serial.printf("Free heap before: %d bytes\n", ESP.getFreeHeap());
+  
+  WiFi.mode(WIFI_STA);
+  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+  
+  Serial.print("Connecting");
+  int attempts = 0;
+  while (WiFi.status() != WL_CONNECTED && attempts < 40) {
+    delay(500);
+    Serial.print(".");
+    attempts++;
+  }
+  
+  // Test NTP time
+  Serial.println("\nGetting time from NTP...");
+  configTime(-28800, 3600, "pool.ntp.org");
+
+  // Wait for time to sync (can take 2-10 seconds)
+  Serial.print("Syncing time");
+  int timeouts = 0;
+  while (time(nullptr) < 100000 && timeouts < 20) {  // Wait up to 10 seconds
+      delay(500);
+      Serial.print(".");
+      timeouts++;
+  }
+  Serial.println();
+
+  struct tm timeinfo;
+  if (getLocalTime(&timeinfo)) {
+      char timeStr[64];
+      strftime(timeStr, sizeof(timeStr), "%A, %B %d %Y %H:%M:%S", &timeinfo);
+      Serial.printf("✓ Current time: %s\n", timeStr);
+  } else {
+      Serial.println("✗ Failed to get time from NTP");
+  }
+
+  WiFi.disconnect();
+  Serial.println("WiFi disconnected");
+  
+  printMenu();
+  break;
+}
 
 
   default:
