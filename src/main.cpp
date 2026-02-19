@@ -1,5 +1,7 @@
 #include <Arduino.h>
 #include <SPI.h>
+//#include <SD.h>  // Add this for SDMMC support
+#include <SdFat.h>  // At top instead of SD.h
 #include "pins.h"
 #include "utils/RC522_Module.h"
 #include "utils/VS1053_Module.h"
@@ -14,6 +16,8 @@ VS1053_Module audioModule(VS1053_CS, VS1053_DCS, VS1053_DREQ, VS1053_RST);
 TFT_Module tftModule(TFT_CS, TFT_DC, TFT_RST, TFT_BL, SPI2_SCK, SPI2_MOSI, SPI2_MISO);
 TFT_TestScreen tftTest(&tftModule);
 FT6236 touchScreen;
+
+SdFat sd;
 
 volatile bool touchDetected = false;
 
@@ -31,6 +35,9 @@ void printMenu() {
   Serial.println("2: TFT video test");
   Serial.println("3: VS1053 audio test");
   Serial.println("4: Touch screen test");
+  Serial.println("5: Tone test");
+  Serial.println("6: SD Card Test");
+  Serial.println("7: Read an MP3 file");
   Serial.println("========================================");
   Serial.println();
 }
@@ -159,7 +166,128 @@ switch (c) {
     printMenu();
     break;
   }
+
+
+  case '5':  // VS1053 Tone Test
+  {
+  Serial.println("\n=== VS1053 Tone Test ===");
+  Serial.println("Initializing VS1053...");
+  
+  SPI.begin(12, 13, 11);
+  delay(10);
+  
+  Serial.println("Starting 440Hz tone...");
+  
+  // Enable sine test
+  SPI.beginTransaction(SPISettings(250000, MSBFIRST, SPI_MODE0));
+  digitalWrite(VS1053_CS, LOW);
+  SPI.transfer(0x02); SPI.transfer(0x00);
+  SPI.transfer(0x08); SPI.transfer(0x24);
+  digitalWrite(VS1053_CS, HIGH);
+  SPI.endTransaction();
+  delay(10);
+  
+  // Start 440Hz tone
+  while (digitalRead(VS1053_DREQ) == LOW) delay(1);
+  SPI.beginTransaction(SPISettings(250000, MSBFIRST, SPI_MODE0));
+  digitalWrite(VS1053_DCS, LOW);
+  SPI.transfer(0x53); SPI.transfer(0xEF); SPI.transfer(0x6E);
+  SPI.transfer(0xB8); SPI.transfer(0x01);
+  SPI.transfer(0x00); SPI.transfer(0x00); SPI.transfer(0x00);
+  digitalWrite(VS1053_DCS, HIGH);
+  SPI.endTransaction();
+  
+  Serial.println("Tone playing... Press any key to stop");
+  while (!Serial.available()) delay(100);
+  Serial.read();
+  
+  // Stop tone
+  SPI.begin(12, 13, 11);
+  while (digitalRead(VS1053_DREQ) == LOW) delay(1);
+  SPI.beginTransaction(SPISettings(250000, MSBFIRST, SPI_MODE0));
+  digitalWrite(VS1053_DCS, LOW);
+  SPI.transfer(0x45); SPI.transfer(0x78); SPI.transfer(0x69); SPI.transfer(0x74);
+  SPI.transfer(0x00); SPI.transfer(0x00); SPI.transfer(0x00); SPI.transfer(0x00);
+  digitalWrite(VS1053_DCS, HIGH);
+  SPI.endTransaction();
+  
+  Serial.println("Tone stopped");
+      printMenu();
+  break;
+  }
     
+ case '6':  // SD Card Test with SdFat
+  Serial.println("\n=== SD Card Test (SdFat) ===");
+  
+  SPI.begin(SPI1_SCK, SPI1_MISO, SPI1_MOSI);
+  
+  if (!sd.begin(SD_CS, SD_SCK_MHZ(25))) {
+    Serial.println("SD init failed!");
+    sd.initErrorHalt(&Serial);
+  } else {
+    Serial.println("SD Card initialized!");
+    
+    // Get actual card info
+    Serial.printf("Card type: %d\n", sd.card()->type());
+    Serial.printf("Sectors: %lu\n", sd.card()->sectorCount());
+    Serial.printf("Size: %.2f MB\n", sd.card()->sectorCount() * 512.0 / 1048576.0);
+    
+    // List files
+    Serial.println("\nRoot directory:");
+    FsFile root;
+    root.open("/");
+    FsFile file;
+    while (file.openNext(&root, O_RDONLY)) {
+      char name[64];
+      file.getName(name, sizeof(name));
+      if (!file.isDirectory()) {
+        Serial.printf("  %s (%lu bytes)\n", name, file.fileSize());
+      } else {
+        Serial.printf("  [%s/]\n", name);
+      }
+      file.close();
+    }
+    root.close();
+  }
+       printMenu();
+  break;
+case '7':  // Test MP3 file read
+  Serial.println("\n=== Test MP3 Read ===");
+  
+  SPI.begin(SPI1_SCK, SPI1_MISO, SPI1_MOSI);
+  
+  if (!sd.begin(SD_CS, SD_SCK_MHZ(25))) {
+    Serial.println("SD init failed!");
+  } else {
+    // Open first album
+    FsFile albumDir;
+    albumDir.open("/Bon Jovi - Have a Nice Day");
+    
+    // Find first MP3
+    FsFile file;
+    while (file.openNext(&albumDir, O_RDONLY)) {
+      char name[64];
+      file.getName(name, sizeof(name));
+      
+      if (strstr(name, ".mp3") || strstr(name, ".MP3")) {
+        Serial.printf("Found MP3: %s (%lu bytes)\n", name, file.fileSize());
+        
+        // Read first 512 bytes
+        uint8_t buffer[512];
+        int bytesRead = file.read(buffer, 512);
+        Serial.printf("Read %d bytes from MP3\n", bytesRead);
+        
+        file.close();
+        break;
+      }
+      file.close();
+    }
+    albumDir.close();
+  }
+         printMenu();
+  break;
+
+
   default:
     break;
 }
