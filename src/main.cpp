@@ -11,6 +11,15 @@
 #include <FT6236.h>  // Changed from FT6X36.h
 #include <WiFi.h>
 #include <time.h>
+#include <Adafruit_PN532.h>
+
+// Remove these two lines:
+// #include <PN532_I2C.h>
+// #include <PN532.h>
+
+// Change the object declaration to:
+// Change the object declaration to:
+Adafruit_PN532 nfc(-1, -1);  // I2C mode
 
 // WiFi credentials
 const char* WIFI_SSID = "Galactia_Guest";
@@ -44,7 +53,9 @@ void printMenu() {
   Serial.println("5: Tone test");
   Serial.println("6: SD Card Test");
   Serial.println("7: Read an MP3 file");
-  Serial.println("8: WiFi Connection Test");
+  Serial.println("8: SD raw read");
+  Serial.println("9: WiFi Connection Test");
+  Serial.println("A: New RF module test");
   Serial.println("========================================");
   Serial.println();
 }
@@ -55,7 +66,7 @@ void setup() {
   
   Serial.println("\n=== ESP32-S3 Hardware Init ===\n");
   Serial.printf("PSRAM size: %d bytes\n", ESP.getPsramSize());
-Serial.printf("Free PSRAM: %d bytes\n", ESP.getFreePsram());
+  Serial.printf("Free PSRAM: %d bytes\n", ESP.getFreePsram());
   
   // Initialize SPI1 bus
   Serial.println("Initializing SPI1 bus...");
@@ -66,22 +77,10 @@ Serial.printf("Free PSRAM: %d bytes\n", ESP.getFreePsram());
   pinMode(VS1053_RST, OUTPUT);
   digitalWrite(VS1053_RST, LOW);
   delay(100);
-  
-// Initialize SPI1 explicitly
-Serial.println("Initializing SPI1 bus...");
-SPI.begin(12, 13, 11);  // SCK, MISO, MOSI
-delay(100);
-pinMode(18, OUTPUT);
-digitalWrite(18, LOW);
-delay(100);
-digitalWrite(18, HIGH);
-delay(100);
-
 
   // Initialize RC522
   Serial.println("\nInitializing RC522 NFC...");
   nfcModule.begin();
-  
   delay(100);
   
   // Release and initialize VS1053
@@ -91,47 +90,65 @@ delay(100);
   Serial.println("\nInitializing VS1053 Audio...");
   audioModule.begin();
   delay(100);
-  // Add after VS1053 module creation
+
   Serial.println("\nInitializing TFT..."); 
   tftModule.begin();
   delay(100);
 
-    // In setup(), after TFT init:
- 
-Serial.println("\nInitializing Touch...");
+  // Initialize I2C and Touch FIRST before PN532
+  Serial.println("\nInitializing Touch...");
+  pinMode(TOUCH_RST, OUTPUT);
+  digitalWrite(TOUCH_RST, LOW);
+  delay(10);
+  digitalWrite(TOUCH_RST, HIGH);
+  delay(50);
 
-// Reset touch controller
-pinMode(TOUCH_RST, OUTPUT);
-digitalWrite(TOUCH_RST, LOW);
-delay(10);
-digitalWrite(TOUCH_RST, HIGH);
-delay(50);
+  Wire.begin(I2C_SDA, I2C_SCL);
+  delay(50);
 
-Wire.begin(I2C_SDA, I2C_SCL);  // Use the defines, not hardcoded 45, 46
-
-// Scan I2C bus
-Serial.println("Scanning I2C bus...");
-for (byte addr = 1; addr < 127; addr++) {
-  Wire.beginTransmission(addr);
-  if (Wire.endTransmission() == 0) {
-    Serial.printf("Found I2C device at 0x%02X\n", addr);
+  // Scan I2C bus
+  Serial.println("Scanning I2C bus...");
+  for (byte addr = 1; addr < 127; addr++) {
+    Wire.beginTransmission(addr);
+    if (Wire.endTransmission() == 0) {
+      Serial.printf("Found I2C device at 0x%02X\n", addr);
+    }
   }
-}
 
-touchScreen.begin();
-pinMode(TOUCH_INT, INPUT);
-attachInterrupt(TOUCH_INT, touchISR, FALLING);  // Touch triggers on falling edge
-Serial.println("Touch: ✓ Ready!");
+  touchScreen.begin();
+  Serial.println("Touch: ✓ Ready!");
 
-  // Restore SPI1 after TFT corrupts it
+  // Initialize PN532 AFTER touch
+  Serial.println("\nInitializing PN532...");
+  nfc.begin();
+  uint32_t versiondata = nfc.getFirmwareVersion();
+  if (versiondata) {
+    Serial.printf("PN532: Firmware %d.%d ✓\n",
+      (versiondata>>16) & 0xFF,
+      (versiondata>>8) & 0xFF);
+    nfc.SAMConfig();
+  } else {
+    Serial.println("PN532: Not found");
+  }
+
+  // Restore SPI1 after TFT
   SPI.begin(SPI1_SCK, SPI1_MISO, SPI1_MOSI);
   delay(100);
 
   Serial.println("\n=== Init Complete ===");
   printMenu();
+
+  // Attach touch interrupt LAST
+  pinMode(TOUCH_INT, INPUT_PULLUP);
+  attachInterrupt(TOUCH_INT, touchISR, FALLING);
 }
 
 void loop() {
+   // Guard against ISR context
+  if (xPortInIsrContext()) return;
+  
+  delay(1);  // Use delay() not vTaskDelay()
+
   if (!Serial.available()) return;
   
   char c = Serial.read();
@@ -142,6 +159,45 @@ switch (c) {
     nfcModule.runTest(5);
     printMenu();
     break;
+
+    case 'A':
+{
+    Serial.println("\n=== PN532 I2C Test ===");
+        // Disable touch interrupt during NFC operation
+    detachInterrupt(TOUCH_INT);
+    //nfc.begin();
+    
+    uint32_t versiondata = nfc.getFirmwareVersion();
+    if (!versiondata) {
+        Serial.println("PN532 not found - check wiring and I2C switches");
+        break;
+    }
+    
+    Serial.printf("Found PN532! Firmware version: %d.%d\n",
+        (versiondata>>16) & 0xFF,
+        (versiondata>>8) & 0xFF);
+    
+    nfc.SAMConfig();
+    Serial.println("Waiting for NFC card - present one now...");
+    
+    uint8_t uid[7];
+    uint8_t uidLength;
+    
+    if (nfc.readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &uidLength, 100)) {
+        Serial.print("UID: ");
+        for (int i = 0; i < uidLength; i++) {
+            Serial.printf("%02X ", uid[i]);
+        }
+        Serial.println();
+        Serial.println("✓ Card detected!");
+    } else {
+        Serial.println("No card found");
+    }
+        // Re-enable touch interrupt
+    attachInterrupt(TOUCH_INT, touchISR, FALLING);
+    printMenu();
+    break;
+}
 
   case '2':
     Serial.println("\n>>> Running TFT display test...");
@@ -271,7 +327,9 @@ switch (c) {
   }
        printMenu();
   break;
-case '7':  // Test MP3 file read
+
+
+case '7':  // Test MP3 file read  APPEAERS to do nothing
   Serial.println("\n=== Test MP3 Read ===");
   
   SPI.begin(SPI1_SCK, SPI1_MISO, SPI1_MOSI);
@@ -281,6 +339,8 @@ case '7':  // Test MP3 file read
   } else {
     // Open first album
     FsFile albumDir;
+    //const char* testFile = "/Music/Boston - Boston/01 - More Than a Feeling.mp3";
+   // albumDir.open("/Bon Jovi - Have a Nice Day");
     albumDir.open("/Bon Jovi - Have a Nice Day");
     
     // Find first MP3
@@ -306,7 +366,70 @@ case '7':  // Test MP3 file read
   }
          printMenu();
   break;
-  case '8':  // WiFi Test
+
+case '8':  // Raw SD read test
+{
+    Serial.println("\n=== SD Raw Read Test ===");
+    
+    SPI.begin(SPI1_SCK, SPI1_MISO, SPI1_MOSI);
+    
+    if (!sd.begin(SD_CS, SD_SCK_MHZ(4))) {
+        Serial.println("SD init failed!");
+        break;
+    }
+    
+    const char* testFile = "/Music/Bon Jovi - Have a Nice Day/01 Have a Nice Day.mp3";
+    //const char* testFile = "/Music/Boston - Boston/01 - More Than a Feeling.mp3";
+    Serial.printf("Opening: %s\n", testFile);
+    
+    FsFile file;
+    if (!file.open(testFile, O_RDONLY)) {
+        Serial.println("Failed to open file!");
+        break;
+    }
+    
+    Serial.printf("File size: %lu bytes\n", (unsigned long)file.fileSize());
+    
+    uint8_t buffer[2048];
+    size_t totalBytes = 0;
+    int errorCount = 0;
+    int chunkCount = 0;
+    unsigned long startTime = millis();
+    
+    while (true) {
+        int bytesRead = file.read(buffer, sizeof(buffer));
+        
+if (bytesRead < 0) {
+    Serial.printf("Read error, reopening file at offset %lu\n", totalBytes);
+    file.close();
+    file.open(testFile, O_RDONLY);
+    file.seekSet(totalBytes);  // seek back to where we were
+    bytesRead = file.read(buffer, sizeof(buffer));
+    Serial.printf("Reopen retry result: %d\n", bytesRead);
+}
+        if (bytesRead == 0) break;
+        
+        totalBytes += bytesRead;
+        chunkCount++;
+        
+        if (chunkCount % 500 == 0) {
+            Serial.printf("Progress: %lu bytes, %d chunks, %lums elapsed\n", 
+                (unsigned long)totalBytes, chunkCount, millis() - startTime);
+        }
+    }
+    
+    file.close();
+    unsigned long elapsed = millis() - startTime;
+    Serial.printf("Complete: %lu bytes, %d chunks, %d errors, %lums\n",
+        (unsigned long)totalBytes, chunkCount, errorCount, elapsed);
+    Serial.printf("Throughput: %.1f KB/s\n", 
+        (totalBytes / 1024.0) / (elapsed / 1000.0));
+    
+    printMenu();
+    break;
+}
+
+  case '9':  // WiFi Test
 {
   Serial.println("\n=== WiFi Connection Test ===");
   Serial.printf("Free heap before: %d bytes\n", ESP.getFreeHeap());

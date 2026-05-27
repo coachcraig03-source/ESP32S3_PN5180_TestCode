@@ -13,16 +13,27 @@ RC522_Module::RC522_Module(uint8_t cs, uint8_t rst)
 void RC522_Module::begin() {
   Serial.println("RC522: Initializing...");
   
-  // Initialize RC522 (SPI already started in main)
-  rfid.PCD_Init();
+  // Force SPI1 init right here
+  SPI.begin(12, 13, 11);
   delay(50);
   
-  // Read firmware version to verify communication
+  pinMode(_cs, OUTPUT);
+  digitalWrite(_cs, HIGH);
+  delay(50);
+
+  rfid.PCD_Init();
+  delay(50);
+  rfid.PCD_SetAntennaGain(rfid.RxGain_max);
+  delay(50);
+
   byte version = rfid.PCD_ReadRegister(rfid.VersionReg);
   Serial.printf("RC522: Firmware version 0x%02X\n", version);
   
+  byte txControl = rfid.PCD_ReadRegister(rfid.TxControlReg);
+  Serial.printf("RC522: TxControl = 0x%02X\n", txControl);
+
   if (version == 0x00 || version == 0xFF) {
-    Serial.println("RC522: ✗ Communication failure - check wiring");
+    Serial.println("RC522: ✗ Communication failure");
   } else {
     Serial.println("RC522: ✓ Ready!");
   }
@@ -106,7 +117,101 @@ bool RC522_Module::readAlbumText(char *textOut, uint8_t maxLen) {
   return textLen > 0;
 }
 
+void RC522_Module::runDiagnostic() {
+    //SPI.begin(SPI2_SCK, SPI2_MISO, SPI2_MOSI);
+  Serial.println("\n=== RC522 DIAGNOSTIC ===");
+  
+ pinMode(_rst, OUTPUT);
+digitalWrite(_rst, LOW);
+delay(100);
+digitalWrite(_rst, HIGH);
+delay(200);
+Serial.printf("RST pin state: %d\n", digitalRead(_rst));
+
+
+  delay(50);
+  Serial.println("\n=== RC522 DIAGNOSTIC ===");
+  // Add this to diagnostic BEFORE switching SPI buses
+// So remove the SPI2 begin and go back to SPI1
+
+Serial.println("\n=== WRITE/READ VERIFY ===");
+byte original = rfid.PCD_ReadRegister(rfid.ModWidthReg);
+Serial.printf("ModWidth original: 0x%02X\n", original);
+
+rfid.PCD_WriteRegister(rfid.ModWidthReg, 0x12);
+delay(10);
+
+byte readback = rfid.PCD_ReadRegister(rfid.ModWidthReg);
+Serial.printf("ModWidth after write 0x12: 0x%02X\n", readback);
+
+if (readback == 0x12) {
+    Serial.println("✓ WRITES WORKING - MOSI OK");
+} else if (readback == original) {
+    Serial.println("✗ WRITE FAILED - MOSI NOT REACHING CHIP");
+} else {
+    Serial.printf("? UNEXPECTED: 0x%02X\n", readback);
+}
+Serial.println("=== END VERIFY ===\n");
+  // Switch to SPI2 for RC522
+  SPI.begin(SPI2_SCK, SPI2_MISO, SPI2_MOSI);
+  delay(50);
+  
+  // Re-init RC522 on SPI2
+  rfid.PCD_Init();
+  delay(50);
+  rfid.PCD_SetAntennaGain(rfid.RxGain_max);
+  delay(50);
+
+  // 1. Check firmware version
+  byte version = rfid.PCD_ReadRegister(rfid.VersionReg);
+  Serial.printf("Firmware: 0x%02X %s\n", version, 
+    (version == 0x91 || version == 0x92) ? "✓" : "✗ UNEXPECTED");
+  
+  // 2. Check antenna
+  byte txControl = rfid.PCD_ReadRegister(rfid.TxControlReg);
+  Serial.printf("TxControl: 0x%02X - Antenna %s\n", txControl,
+    (txControl & 0x03) == 0x03 ? "ON ✓" : "OFF ✗");
+  
+  // 3. Check gain
+  byte gain = rfid.PCD_GetAntennaGain();
+  Serial.printf("Antenna gain: 0x%02X %s\n", gain,
+    gain == 0x70 ? "MAX ✓" : "NOT MAX ✗");
+
+  // 4. ComIrq
+  byte comIrq = rfid.PCD_ReadRegister(rfid.ComIrqReg);
+  Serial.printf("ComIrq: 0x%02X\n", comIrq);
+
+  // 5. ErrorReg
+  byte error = rfid.PCD_ReadRegister(rfid.ErrorReg);
+  Serial.printf("ErrorReg: 0x%02X %s\n", error,
+    error == 0x00 ? "✓ No errors" : "✗ ERRORS PRESENT");
+
+  // 6. Force antenna on
+  Serial.println("Forcing antenna on...");
+  rfid.PCD_AntennaOn();
+  delay(50);
+  txControl = rfid.PCD_ReadRegister(rfid.TxControlReg);
+  Serial.printf("TxControl after force: 0x%02X\n", txControl);
+
+  // 7. REQA test
+  Serial.println("\nSending REQA - present card now...");
+  for(int i = 0; i < 20; i++) {
+    rfid.PCD_WriteRegister(rfid.ComIrqReg, 0x7F);
+    
+    bool present = rfid.PICC_IsNewCardPresent();
+    byte irq = rfid.PCD_ReadRegister(rfid.ComIrqReg);
+    byte err = rfid.PCD_ReadRegister(rfid.ErrorReg);
+    
+    Serial.printf("Attempt %2d: present=%d ComIrq=0x%02X Error=0x%02X\n", 
+      i+1, present, irq, err);
+    delay(200);
+  }
+  
+  Serial.println("=== END DIAGNOSTIC ===\n");
+}
+
 void RC522_Module::runTest(int count) {
+  runDiagnostic();
   for (int i = 0; i < count; i++) {
     Serial.printf("\n--- RC522 Read %d/%d ---\n", i + 1, count);
     Serial.println("Waiting for card...");

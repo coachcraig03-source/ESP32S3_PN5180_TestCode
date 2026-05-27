@@ -8,6 +8,7 @@
 
 #include <Arduino.h>
 #include <MFRC522.h>
+#include "pins.h" 
 
 class RC522_Module {
 public:
@@ -16,6 +17,8 @@ public:
   
   // Initialize the RC522
   void begin();
+
+  void runDiagnostic();
   
   // Read user data from NTAG215 (starting at page 4)
   bool readUserData(uint8_t *buffer, uint8_t numBytes);
