@@ -32,7 +32,8 @@ TFT_Module tftModule(TFT_CS, TFT_DC, TFT_RST, TFT_BL, SPI2_SCK, SPI2_MOSI, SPI2_
 TFT_TestScreen tftTest(&tftModule);
 FT6236 touchScreen;
 
-SdFat sd;
+//SdFat sd;
+SdFs sd;
 
 volatile bool touchDetected = false;
 
@@ -293,11 +294,12 @@ switch (c) {
   }
     
  case '6':  // SD Card Test with SdFat
-  Serial.println("\n=== SD Card Test (SdFat) ===");
+  Serial.println("\n=== SD Card Test now SdFs (SdFat) ===");
   
   SPI.begin(SPI1_SCK, SPI1_MISO, SPI1_MOSI);
   
-  if (!sd.begin(SD_CS, SD_SCK_MHZ(25))) {
+  //if (!sd.begin(SD_CS, SD_SCK_MHZ(25))) {
+  if (!sd.begin(SdSpiConfig(SD_CS, SHARED_SPI, SD_SCK_MHZ(4)))) {
     Serial.println("SD init failed!");
     sd.initErrorHalt(&Serial);
   } else {
